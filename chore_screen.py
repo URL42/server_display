@@ -247,7 +247,6 @@ def _build_column(parent, col_idx, member, expanded):
         t_lbl.set_text(title)
         t_lbl.set_pos(22, 7)
         t_lbl.set_size(COL_W - 42, 18)
-        t_lbl.set_long_mode(lv.label.LONG.CLIP)
 
         if done:
             _set_text(t_lbl, C_DONE, lv.font_montserrat_14)
@@ -333,7 +332,6 @@ def build(tile):
     _date_lbl.set_pos(SCREEN_W - 160, 14)
     _set_text(_date_lbl, C_SUBTEXT, lv.font_montserrat_14)
     _date_lbl.set_width(150)
-    _date_lbl.set_long_mode(lv.label.LONG.CLIP)
 
     for i in (1, 2):
         div = lv.obj(tile)
