@@ -1,0 +1,16 @@
+# Exclude waveshare MicroPython files — not needed in the Docker image
+*.example
+secrets.py
+display_driver.py
+chore_screen.py
+n8n_screen.py
+ch422g.py
+gt911.py
+sdcard_driver.py
+ 
+# Git and OS noise
+.git
+.DS_Store
+.env
+README.md
+data/
