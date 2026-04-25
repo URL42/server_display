@@ -87,7 +87,7 @@ def _make_bar(parent, x, y, w, h, fill_color, pct):
     bar.set_size(w, h)
     bar.set_pos(x, y)
     bar.set_range(0, 100)
-    bar.set_value(pct, lv.ANIM.OFF)
+    bar.set_value(pct, 0)
     bar.set_style_bg_color(C_BAR_BG, lv.PART.MAIN)
     bar.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
     bar.set_style_radius(h // 2, lv.PART.MAIN)
