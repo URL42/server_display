@@ -17,7 +17,7 @@ rgb_bus = lcd_bus.RGBBus(
     data0=14, data1=38, data2=18, data3=17, data4=10,
     data5=39, data6=0, data7=45, data8=48, data9=47, data10=21,
     data11=1, data12=2, data13=42, data14=41, data15=40,
-    freq=9200000,          # was 13000000 — drop to panel spec to fix pixel drift
+    freq=13000000,         # restored — 9200000 caused white screen on this panel
     hsync_front_porch=8,
     hsync_pulse_width=4,
     hsync_back_porch=8,
