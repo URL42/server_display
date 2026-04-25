@@ -16,7 +16,7 @@ async def get_sections() -> dict[str, str]:
             params={"project_id": settings.todoist_project_id}
         )
         r.raise_for_status()
-    return {s["name"]: s["id"] for s in r.json()}
+    return {s["name"]: s["id"] for s in r.json()["results"]}
 
 async def get_tasks_for_section(section_id: str) -> list[dict]:
     """Returns all active (incomplete) tasks in a section."""
@@ -30,7 +30,8 @@ async def get_tasks_for_section(section_id: str) -> list[dict]:
             }
         )
         r.raise_for_status()
-    return r.json()
+    data = r.json()
+    return data["results"] if "results" in data else data
 
 async def close_task(task_id: str) -> bool:
     """Marks a task complete. Returns True on success."""
