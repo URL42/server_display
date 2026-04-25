@@ -1,6 +1,6 @@
 services:
   bossbitch:
-    build: ./server
+    build: .
     container_name: bossbitch
     restart: unless-stopped
     ports:
