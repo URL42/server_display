@@ -2,7 +2,7 @@ import datetime
 import httpx
 from config import settings
 
-BASE    = "https://api.todoist.com/rest/v2"
+BASE    = "https://api.todoist.com/api/v1"
 HEADERS = {"Authorization": f"Bearer {settings.todoist_api_token}"}
 
 SECTION_NAMES = ["Mama", "Baba", "Yun"]
