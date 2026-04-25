@@ -296,7 +296,7 @@ def _build_column(parent, col_idx, member, expanded):
 def _rebuild_columns():
     if _tile is None or _current_data is None:
         return
-    cnt = _tile.get_child_cnt()
+    cnt = _tile.get_child_count()
     for i in range(cnt - 1, -1, -1):
         c = _tile.get_child(i)
         if c and c.get_y() >= HEADER_H and c.get_width() >= COL_W - 4:
