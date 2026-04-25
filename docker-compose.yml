@@ -4,7 +4,7 @@ services:
     container_name: bossbitch
     restart: unless-stopped
     ports:
-      - "8001:8001"
+      - "8099:8099"
     volumes:
       - ./data:/data
     env_file:
