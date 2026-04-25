@@ -321,7 +321,7 @@ def build(tile):
     _set_bg(hdr_bar, C_SCREEN_HDR)
     hdr_bar.set_style_border_width(0, 0)
     hdr_bar.set_style_pad_all(0, 0)
-    hdr_bar.clear_flag(lv.obj.FLAG.CLICKABLE)
+    hdr_bar.remove_flag(lv.obj.FLAG.CLICKABLE)
 
     title_lbl = lv.label(hdr_bar)
     title_lbl.set_text(lv.SYMBOL.HOME + "  CHORES")
@@ -341,7 +341,7 @@ def build(tile):
         div.set_pos(i * COL_W, HEADER_H)
         _set_bg(div, C_COL_BORDER)
         div.set_style_border_width(0, 0)
-        div.clear_flag(lv.obj.FLAG.CLICKABLE)
+        div.remove_flag(lv.obj.FLAG.CLICKABLE)
 
     loading = lv.label(tile)
     loading.set_text("Loading chores...")
