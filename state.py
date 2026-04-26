@@ -1,9 +1,11 @@
 import aiosqlite
 import datetime
 import json
+from zoneinfo import ZoneInfo
 from config import settings
 
 DB = settings.db_path
+TZ = ZoneInfo("America/Los_Angeles")
 
 async def init_db():
     async with aiosqlite.connect(DB) as db:
@@ -24,10 +26,10 @@ async def init_db():
     print("DB initialised:", DB)
 
 def _today() -> str:
-    return datetime.date.today().isoformat()
+    return datetime.datetime.now(TZ).date().isoformat()
 
 def _week_start() -> str:
-    today = datetime.date.today()
+    today = datetime.datetime.now(TZ).date()
     return (today - datetime.timedelta(days=today.weekday())).isoformat()
 
 def _pct(done: int, total: int) -> int:
