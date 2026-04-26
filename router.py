@@ -1,13 +1,15 @@
 import datetime
+from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException
 from chores.models import ChoresPayload, CompleteRequest, CompleteResponse, Member, Task, XP
 from chores import todoist, state
 
 router = APIRouter()
+TZ = ZoneInfo("America/Los_Angeles")
 
 @router.get("", response_model=ChoresPayload)
 async def get_chores():
-    today     = datetime.date.today().isoformat()
+    today = datetime.datetime.now(TZ).date().isoformat()
     sections  = await todoist.get_sections()
     members   = []
 
