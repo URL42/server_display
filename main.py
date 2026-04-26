@@ -571,10 +571,13 @@ print("UI built. Starting main loop...")
 # 5        — fetch chores
 # Back to 0 after state 5.
 
-server_last = 0
-btc_last    = 0
-chore_last  = 0
-state       = 0
+server_last        = 0
+btc_last           = 0
+chore_last         = 0
+display_reset_last = 0
+state              = 0
+
+DISPLAY_RESET_MS = 20 * 60 * 1000  # reset display every 20 min to prevent drift
 
 while True:
     n8n_screen.tick()
@@ -582,6 +585,12 @@ while True:
     time.sleep_ms(5)
 
     now = time.ticks_ms()
+
+    # Periodic display re-init to prevent RGB bus drift
+    if time.ticks_diff(now, display_reset_last) > DISPLAY_RESET_MS:
+        display.init()
+        display_reset_last = now
+        print("Display re-init")
 
     if state == 0:
         if force_refresh or time.ticks_diff(now, server_last) > SERVER_INTERVAL_MS:
