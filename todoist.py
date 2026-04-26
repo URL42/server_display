@@ -10,11 +10,48 @@ SECTION_NAMES = ["Mama", "Baba", "Yun"]
 TZ = ZoneInfo("America/Los_Angeles")
 
 def _today() -> str:
-    """Today's date in Pacific time."""
     return datetime.datetime.now(TZ).date().isoformat()
 
+def _due_date_local(task: dict) -> str:
+    """
+    Extract due date in Pacific time.
+    Fixed-time tasks: UTC ISO string e.g. 2026-04-28T14:00:00Z
+    All-day tasks: plain date string e.g. 2026-04-28
+    """
+    due = task.get("due")
+    if not due:
+        return ""
+    date_str = due.get("date", "")
+    if not date_str:
+        return ""
+    if len(date_str) == 10:
+        return date_str
+    try:
+        dt_utc = datetime.datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        return dt_utc.astimezone(TZ).date().isoformat()
+    except Exception:
+        return date_str[:10]
+
+def is_overdue(task: dict) -> bool:
+    due_date = _due_date_local(task)
+    return bool(due_date) and due_date < _today()
+
+def is_today_or_overdue(task: dict) -> bool:
+    due_date = _due_date_local(task)
+    return bool(due_date) and due_date <= _today()
+
+def is_this_week(task: dict) -> bool:
+    """True if task is due Mon-Sun of the current Pacific week."""
+    due_date = _due_date_local(task)
+    if not due_date:
+        return False
+    today = datetime.datetime.now(TZ).date()
+    week_start = today - datetime.timedelta(days=today.weekday())
+    week_end   = week_start + datetime.timedelta(days=6)
+    d = datetime.date.fromisoformat(due_date)
+    return week_start <= d <= week_end
+
 async def get_sections() -> dict[str, str]:
-    """Returns {section_name: section_id} for the chore project."""
     async with httpx.AsyncClient() as client:
         r = await client.get(
             f"{BASE}/sections",
@@ -40,7 +77,6 @@ async def get_tasks_for_section(section_id: str) -> list[dict]:
     return data["results"] if "results" in data else data
 
 async def close_task(task_id: str) -> bool:
-    """Marks a task complete. Returns True on success."""
     async with httpx.AsyncClient() as client:
         r = await client.post(
             f"{BASE}/tasks/{task_id}/close",
@@ -48,34 +84,10 @@ async def close_task(task_id: str) -> bool:
         )
     return r.status_code == 204
 
-def _due_date_local(task: dict) -> str:
-    """
-    Extract the due date in Pacific time.
-    Todoist returns fixed-time tasks as UTC ISO strings (e.g. 2026-04-28T14:00:00Z).
-    All-day tasks return plain date strings (e.g. 2026-04-28).
-    We convert UTC timestamps to Pacific before extracting the date portion.
-    """
-    due = task.get("due")
-    if not due:
-        return ""
-    date_str = due.get("date", "")
-    if not date_str:
-        return ""
-    # All-day task — no time component, already local date
-    if len(date_str) == 10:
-        return date_str
-    # Has time component — parse as UTC and convert to Pacific
-    try:
-        dt_utc = datetime.datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-        dt_pacific = dt_utc.astimezone(TZ)
-        return dt_pacific.date().isoformat()
-    except Exception:
-        return date_str[:10]
+def count_today(tasks: list[dict]) -> int:
+    """Count tasks due today or overdue."""
+    return sum(1 for t in tasks if is_today_or_overdue(t))
 
-def is_overdue(task: dict) -> bool:
-    due_date = _due_date_local(task)
-    return bool(due_date) and due_date < _today()
-
-def is_today_or_overdue(task: dict) -> bool:
-    due_date = _due_date_local(task)
-    return bool(due_date) and due_date <= _today()
+def count_this_week(tasks: list[dict]) -> int:
+    """Count tasks due Mon-Sun this Pacific week."""
+    return sum(1 for t in tasks if is_this_week(t))
