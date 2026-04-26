@@ -7,6 +7,7 @@ from config import settings
 DB = settings.db_path
 TZ = ZoneInfo("America/Los_Angeles")
 
+
 async def init_db():
     async with aiosqlite.connect(DB) as db:
         await db.execute("""
@@ -25,23 +26,35 @@ async def init_db():
         await db.commit()
     print("DB initialised:", DB)
 
+
 def _today() -> str:
     return datetime.datetime.now(TZ).date().isoformat()
+
 
 def _week_start() -> str:
     today = datetime.datetime.now(TZ).date()
     return (today - datetime.timedelta(days=today.weekday())).isoformat()
 
+
 def _pct(done: int, total: int) -> int:
     return round((done / total) * 100) if total > 0 else 0
 
-def _level(history: list[int]) -> int:
-    avg = sum(history[-4:]) / max(len(history[-4:]), 1)
+
+def _compute_level(history: list[int]) -> int:
+    """
+    Level based on rolling 4-week average of weekly completion %.
+    Only updated at week boundaries — never mid-week.
+    Increments and decrements by 1 at a time so it builds/falls gradually.
+    """
+    if not history:
+        return 1
+    avg = sum(history[-4:]) / min(len(history), 4)
     if avg >= 90: return 5
     if avg >= 75: return 4
     if avg >= 60: return 3
     if avg >= 40: return 2
     return 1
+
 
 async def get_state(member: str) -> dict:
     async with aiosqlite.connect(DB) as db:
@@ -54,12 +67,13 @@ async def get_state(member: str) -> dict:
         return {
             "member": member, "daily_done": 0, "daily_total": 0,
             "weekly_done": 0, "weekly_total": 0,
-            "last_reset_date": "", "week_start": "", "level": 1,
-            "weekly_history": []
+            "last_reset_date": "", "week_start": "",
+            "level": 1, "weekly_history": []
         }
     d = dict(row)
     d["weekly_history"] = json.loads(d["weekly_history"])
     return d
+
 
 async def _upsert(db, s: dict):
     await db.execute("""
@@ -83,36 +97,64 @@ async def _upsert(db, s: dict):
         s["level"], json.dumps(s["weekly_history"])
     ))
 
-async def reset_if_needed(member: str, today_total: int) -> dict:
-    """Reset daily/weekly counters if the date has rolled over."""
+
+async def reset_if_needed(
+    member: str,
+    today_total: int,
+    week_total: int
+) -> dict:
+    """
+    Reset daily/weekly counters at day/week boundaries.
+
+    - daily_total  = tasks due today (looked up from Todoist, passed in)
+    - weekly_total = tasks due Mon-Sun this week (looked up, passed in)
+    - Both are set fresh at reset time, NOT accumulated during the day
+    - daily_done / weekly_done only increment via record_completion()
+    - Yun's level only updates at week reset, never mid-week
+    """
     s = await get_state(member)
     today = _today()
     ws    = _week_start()
     changed = False
 
+    # ── Weekly reset (Monday) ─────────────────────────────────────────────
+    if s["week_start"] != ws:
+        # Snapshot the completed week's % into history
+        final_pct = _pct(s["weekly_done"], max(s["weekly_total"], 1))
+        hist = s["weekly_history"] + [final_pct]
+        hist = hist[-8:]  # keep 8 weeks
+
+        s["weekly_history"] = hist
+        s["weekly_done"]    = 0
+        s["weekly_total"]   = week_total
+        s["week_start"]     = ws
+
+        # Yun's level: only move by 1 step per week — gradual up/down
+        if member == "Yun":
+            target = _compute_level(hist)
+            current = s["level"]
+            if target > current:
+                s["level"] = current + 1      # step up one level
+            elif target < current:
+                s["level"] = current - 1      # step down one level
+            # else: stay the same
+            s["level"] = max(1, min(5, s["level"]))  # clamp 1-5
+
+        changed = True
+
+    # ── Daily reset ────────────────────────────────────────────────────────
     if s["last_reset_date"] != today:
-        # End-of-day: push yesterday's weekly pct into history if week not reset
-        if s["weekly_total"] > 0:
-            pct = _pct(s["weekly_done"], s["weekly_total"])
-            # Only push on actual week boundary to keep weekly history meaningful
         s["daily_done"]      = 0
         s["daily_total"]     = today_total
         s["last_reset_date"] = today
         changed = True
-
-    if s["week_start"] != ws:
-        pct = _pct(s["weekly_done"], s["weekly_total"])
-        hist = s["weekly_history"] + [pct]
-        s["weekly_history"] = hist[-8:]   # keep 8 weeks
-        s["weekly_done"]    = 0
-        s["weekly_total"]   = 0
-        s["week_start"]     = ws
-        if s["member"] == "Yun":
-            s["level"] = _level(s["weekly_history"])
-        changed = True
-
-    # Always refresh today_total so new tasks added mid-day are counted
-    s["daily_total"] = today_total + s["daily_done"]
+    else:
+        # Mid-day: refresh total in case tasks were added (but don't reset done)
+        # Only update if the new total is >= what we've already done
+        new_total = max(today_total, s["daily_done"])
+        if new_total != s["daily_total"]:
+            s["daily_total"] = new_total
+            changed = True
 
     if changed:
         async with aiosqlite.connect(DB) as db:
@@ -121,23 +163,23 @@ async def reset_if_needed(member: str, today_total: int) -> dict:
 
     return s
 
+
 async def record_completion(member: str) -> dict:
-    """Increment done counters after a task is completed."""
+    """
+    Increment done counters when a task is completed.
+    Does NOT update Yun's level — that only happens at week reset.
+    """
     s = await get_state(member)
-    s["daily_done"]  = s.get("daily_done", 0) + 1
-    s["weekly_done"] = s.get("weekly_done", 0) + 1
-    if member == "Yun":
-        wp = _pct(s["weekly_done"], max(s["weekly_total"], 1))
-        hist = s["weekly_history"] + [wp]
-        s["weekly_history"] = hist[-8:]
-        s["level"] = _level(s["weekly_history"])
+    s["daily_done"]  = min(s.get("daily_done", 0) + 1, s.get("daily_total", 99))
+    s["weekly_done"] = min(s.get("weekly_done", 0) + 1, s.get("weekly_total", 99))
     async with aiosqlite.connect(DB) as db:
         await _upsert(db, s)
         await db.commit()
     return s
 
+
 def compute_xp(s: dict) -> dict:
     return {
-        "daily_pct":  _pct(s["daily_done"],  max(s["daily_total"],  1)),
+        "daily_pct":  _pct(s["daily_done"], max(s["daily_total"], 1)),
         "weekly_pct": _pct(s["weekly_done"], max(s["weekly_total"], 1)),
     }
