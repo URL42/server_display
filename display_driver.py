@@ -17,13 +17,13 @@ rgb_bus = lcd_bus.RGBBus(
     data0=14, data1=38, data2=18, data3=17, data4=10,
     data5=39, data6=0, data7=45, data8=48, data9=47, data10=21,
     data11=1, data12=2, data13=42, data14=41, data15=40,
-    freq=13000000,         # restored — 9200000 caused white screen on this panel
+    freq=13000000,
     hsync_front_porch=8,
     hsync_pulse_width=4,
     hsync_back_porch=8,
-    vsync_front_porch=8,   # was 16 — mismatch caused scanline desync over time
+    vsync_front_porch=8,
     vsync_pulse_width=4,
-    vsync_back_porch=8,    # was 16
+    vsync_back_porch=8,
     vsync_idle_low=True,
     de_idle_high=False,
     pclk_idle_high=False,
