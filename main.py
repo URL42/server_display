@@ -577,7 +577,7 @@ chore_last         = 0
 display_reset_last = 0
 state              = 0
 
-DISPLAY_RESET_MS = 20 * 60 * 1000  # reset display every 20 min to prevent drift
+DISPLAY_RESET_MS = 15 * 60 * 1000  # reset display every 15 min to prevent drift
 
 while True:
     n8n_screen.tick()
@@ -586,11 +586,12 @@ while True:
 
     now = time.ticks_ms()
 
-    # Periodic display re-init to prevent RGB bus drift
+    # Periodic display reset to prevent RGB bus drift
     if time.ticks_diff(now, display_reset_last) > DISPLAY_RESET_MS:
+        display.reset()
         display.init()
         display_reset_last = now
-        print("Display re-init")
+        print("Display reset + re-init")
 
     if state == 0:
         if force_refresh or time.ticks_diff(now, server_last) > SERVER_INTERVAL_MS:
