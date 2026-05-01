@@ -586,12 +586,11 @@ while True:
 
     now = time.ticks_ms()
 
-    # Periodic display reset to prevent RGB bus drift
+    # Periodic hard reboot to prevent RGB bus drift
     if time.ticks_diff(now, display_reset_last) > DISPLAY_RESET_MS:
-        display.reset()
-        display.init()
-        display_reset_last = now
-        print("Display reset + re-init")
+        print("Rebooting to reset RGB bus drift...")
+        time.sleep_ms(100)
+        machine.reset()
 
     if state == 0:
         if force_refresh or time.ticks_diff(now, server_last) > SERVER_INTERVAL_MS:
