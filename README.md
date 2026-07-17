@@ -153,32 +153,43 @@ Waveshare tap → server /chores/complete → Todoist API close task
 - Tap a person's **header** to toggle full view (shows completed tasks too)
 - Screen only redraws if data actually changed (hash comparison)
 
-### XP system
+### XP economy
 
-**Daily %**
-- `tasks completed today ÷ tasks due today × 100`
-- Resets at midnight Pacific
-- Totals are set at reset time from live Todoist data
+XP is **effort-weighted**, not task-counted. Design rationale:
 
-**Weekly %**
-- `tasks completed this week ÷ tasks due Mon–Sun × 100`
-- Resets every Monday midnight Pacific
-- Accumulates across the week
+- **Weighted tasks** — equal-value tasks let a rational kid farm the 30-second
+  chores and skip the 20-minute ones while keeping a high completion %
+  (Goodhart's law). Weights align the metric with actual effort:
 
-**Yun's level (1–5)**
-- Only updates at the weekly reset — never mid-week
-- Based on 4-week rolling average of weekly completion %
-- Moves **one step at a time** — gradual build up or down
+| Tier | XP | Examples |
+|---|---|---|
+| Quick | 5 | couch pillows, school sheet, bathroom trash, water bottle |
+| Standard | 10 | dishes, trash, pickup, surfaces, toilet, make beds |
+| Effort | 15 | laundry, vacuum, dog poop, bathtub |
+| Big | 25 | clean room, changing sheets, monthly deep cleans |
 
-| 4-week avg | Level |
-|---|---|
-| 90%+ | 5 ⭐⭐⭐⭐⭐ |
-| 75–89% | 4 |
-| 60–74% | 3 |
-| 40–59% | 2 |
-| Under 40% | 1 |
+- **Diminishing returns** — same task completed twice in one day earns 50%,
+  third time earns 0. Closes the farming door entirely.
+- **Daily/weekly bars** show `XP earned / XP available` (Pacific time resets,
+  daily at midnight, weekly on Monday).
 
-Adults show daily/weekly bars only — no levels (it's for the kid).
+**Yun's progression (kid-only):**
+
+- **Levels** are a cumulative XP bank: L2 at 500, L3 at 1200, L4 at 2200,
+  L5 at 3500. Widening gaps — early levels hook, later ones retain.
+  Display shows level + % progress to next (e.g. `LV.3 67%`).
+- **Decay** — a week under 50% completion costs 10% of the XP gap to the
+  next level. Gradual slide, never a full-level cliff.
+- **Streaks** — a day at ≥70% of available XP extends the streak (lightning
+  icon on display). Every 7 consecutive days banks a **freeze token**
+  (max 2, shown as `*`). A missed day auto-spends a freeze instead of
+  breaking the streak — loss aversion drives consistency, freezes prevent
+  one soccer practice from destroying motivation.
+- **Rewards** at level boundaries are a family decision (pick dinner, movie
+  night, etc.) — the menu mattering to the kid is most of whether token
+  economies work.
+
+Adults show XP bars only — no levels or streaks.
 
 ### Chore rotation
 
@@ -211,3 +222,11 @@ Adults show daily/weekly bars only — no levels (it's for the kid).
 - Due dates from Todoist are UTC timestamps, converted to Pacific before comparison
 - SQLite DB persists in `./data/server.db` via Docker volume mount
 - Port 8099 chosen to avoid conflicts with existing services on server
+- **Display drift**: the horizontal drift on the RGB panel is caused by PSRAM
+  bandwidth starvation — the RGB DMA streams pixels from PSRAM and WiFi/socket
+  traffic can stall those reads, slipping the panel scan position.
+  `display_driver.py` attempts to enable **bounce buffers** (internal-SRAM DMA
+  staging, Espressif's recommended fix). If the firmware build doesn't support
+  it, `main.py` falls back to a periodic reboot every 15 minutes. Check the
+  boot log for `RGBBus OK with bounce buffer` vs `no bounce buffer support` —
+  if unsupported, upgrading the lvgl_micropython firmware build fixes it properly.
