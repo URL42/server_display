@@ -1,5 +1,14 @@
-# display_driver.py - ORIGINAL working version, restored exactly
-# Only change: TaskHandler removed (dashboard.py drives the loop)
+# display_driver.py
+# Waveshare ESP32-S3-Touch-LCD-4.3 RGB display init.
+#
+# DRIFT FIX: The horizontal drift over time is caused by PSRAM bandwidth
+# starvation — the RGB DMA streams pixels from PSRAM continuously, and when
+# WiFi/socket traffic stalls those reads the panel scan position slips.
+# Espressif's fix is "bounce buffers": small internal-SRAM staging buffers
+# the DMA reads from instead of PSRAM directly. Newer lvgl_micropython
+# builds expose this on RGBBus. We try it and fall back gracefully —
+# main.py checks BOUNCE_OK to decide whether the periodic reboot fallback
+# is still needed.
 from micropython import const
 import gc
 import lvgl as lv
@@ -9,7 +18,9 @@ import task_handler
 
 gc.collect()
 
-rgb_bus = lcd_bus.RGBBus(
+_WIDTH, _HEIGHT = 800, 480
+
+_BUS_KWARGS = dict(
     hsync=46,
     vsync=3,
     de=5,
@@ -29,9 +40,26 @@ rgb_bus = lcd_bus.RGBBus(
     pclk_idle_high=False,
     pclk_active_low=1,
 )
-print("RGBBus OK:", rgb_bus)
 
-_WIDTH, _HEIGHT = 800, 480
+# Try bounce buffer first (10 scanlines of internal SRAM staging).
+# Different lvgl_micropython versions name this differently, so try both.
+BOUNCE_OK = False
+rgb_bus = None
+for kwarg_name in ("bounce_buffer_size_px", "bounce_buffer_lines"):
+    try:
+        kwargs = dict(_BUS_KWARGS)
+        kwargs[kwarg_name] = _WIDTH * 10 if kwarg_name.endswith("px") else 10
+        rgb_bus = lcd_bus.RGBBus(**kwargs)
+        BOUNCE_OK = True
+        print("RGBBus OK with bounce buffer ({}):".format(kwarg_name), rgb_bus)
+        break
+    except TypeError:
+        continue
+
+if rgb_bus is None:
+    rgb_bus = lcd_bus.RGBBus(**_BUS_KWARGS)
+    print("RGBBus OK (no bounce buffer support in this build):", rgb_bus)
+
 _FB_BYTES = _WIDTH * _HEIGHT * 2
 
 print("Alloc framebuffer 1:", _FB_BYTES, "bytes")
