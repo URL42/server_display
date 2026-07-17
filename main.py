@@ -32,7 +32,7 @@ MAX_BODY_BYTES   = 32768
 
 SCREEN_W    = 800
 SCREEN_H    = 480
-TOTAL_TILES = 5
+TOTAL_TILES = 6
 
 GT911_SCL        = 9
 GT911_SDA        = 8
@@ -138,8 +138,9 @@ def _http_get_json(host, port, path, use_ssl=False, server_hostname=None):
         except Exception:
             pass
 
-def fetch_stats(ip):
-    return _http_get_json(ip, STATS_PORT, STATS_PATH)
+def fetch_stats(ip, detail=False):
+    path = STATS_PATH + "?detail=true" if detail else STATS_PATH
+    return _http_get_json(ip, STATS_PORT, path)
 
 def fetch_btc():
     data = _http_get_json(BTC_HOST, BTC_PORT,
@@ -182,6 +183,12 @@ except Exception:
 from display_driver import display, BOUNCE_OK
 import n8n_screen
 import chore_screen
+try:
+    import btop_screen
+    HAS_BTOP = True
+except ImportError:
+    HAS_BTOP = False
+    print("WARN: btop_screen.py not found on flash — tile will be a placeholder")
 
 
 # ================= TOUCH =================
@@ -493,21 +500,26 @@ tv.set_size(800, 420)
 tv.align(lv.ALIGN.TOP_MID, 0, 0)
 tv.remove_flag(lv.obj.FLAG.GESTURE_BUBBLE)
 
-# Tile order: server(0), chores(1), btc(2), n8n(3), ha(4)
+# Tile order: server(0), chores(1), btop(2), btc(3), n8n(4), ha(5)
 t1 = tv.add_tile(0, 0, lv.DIR.RIGHT)
 t2 = tv.add_tile(1, 0, lv.DIR.LEFT | lv.DIR.RIGHT)
 t3 = tv.add_tile(2, 0, lv.DIR.LEFT | lv.DIR.RIGHT)
 t4 = tv.add_tile(3, 0, lv.DIR.LEFT | lv.DIR.RIGHT)
-t5 = tv.add_tile(4, 0, lv.DIR.LEFT)
+t5 = tv.add_tile(4, 0, lv.DIR.LEFT | lv.DIR.RIGHT)
+t6 = tv.add_tile(5, 0, lv.DIR.LEFT)
 
 cards = []
 for i, s in enumerate(SERVERS):
     cards.append(create_server_card(t1, s["name"], i))
 
 chore_screen.build(t2)
-btc_ui = create_btc_card(t3)
-n8n_screen.build(t4)
-create_placeholder(t5, "Home Assistant", lv.SYMBOL.HOME)
+if HAS_BTOP:
+    btop_screen.build(t3)
+else:
+    create_placeholder(t3, "btop (missing)", lv.SYMBOL.WARNING)
+btc_ui = create_btc_card(t4)
+n8n_screen.build(t5)
+create_placeholder(t6, "Home Assistant", lv.SYMBOL.HOME)
 
 # Bottom nav bar
 bottom_bar = lv.obj(scr)
@@ -524,15 +536,16 @@ def get_page():
     if a == t3: return 2
     if a == t4: return 3
     if a == t5: return 4
+    if a == t6: return 5
     return 0
 
 def nav_left(e):
-    idx = get_page()
-    if idx > 0: tv.set_tile_by_index(idx - 1, 0, 1)
+    idx = (get_page() - 1) % TOTAL_TILES   # wraps: first tile -> last
+    tv.set_tile_by_index(idx, 0, 1)
 
 def nav_right(e):
-    idx = get_page()
-    if idx < TOTAL_TILES - 1: tv.set_tile_by_index(idx + 1, 0, 1)
+    idx = (get_page() + 1) % TOTAL_TILES   # wraps: last tile -> first
+    tv.set_tile_by_index(idx, 0, 1)
 
 btn_prev = lv.button(bottom_bar)
 btn_prev.set_size(80, 40)
@@ -600,8 +613,15 @@ while True:
             server_last = now
 
     elif state == 1:
-        print("Fetch server 0")
-        update_card_ui(cards[0], fetch_stats(SERVERS[0]["ip"]), SERVERS[0]["role"])
+        print("Fetch server 0 (+btop detail)")
+        # One request feeds both the server card and the btop screen
+        data0 = fetch_stats(SERVERS[0]["ip"], detail=HAS_BTOP)
+        update_card_ui(cards[0], data0, SERVERS[0]["role"])
+        if HAS_BTOP and data0:
+            try:
+                btop_screen.update(data0, data0.get("detail", {}))
+            except Exception as e:
+                print("btop update fail:", repr(e))
         state = 2
 
     elif state == 2:
