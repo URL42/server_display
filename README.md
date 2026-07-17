@@ -23,7 +23,8 @@ server-display/
 │
 ├── main.py                 # Waveshare MicroPython dashboard
 ├── chore_screen.py         # Chore chart tile (tile 2)
-├── n8n_screen.py           # n8n workflow runner tile (tile 4)
+├── btop_screen.py          # btop-style system monitor (tile 3)
+├── n8n_screen.py           # n8n workflow runner tile (tile 5)
 ├── display_driver.py       # RGB bus + framebuffer init
 ├── ch422g.py               # IO expander driver
 ├── gt911.py                # Touch driver
@@ -114,6 +115,7 @@ Set `WIFI_SSID`, `WIFI_PASSWORD`, `N8N_BASE_URL`, `N8N_API_KEY`, `server_HOST` (
 mpremote cp secrets.py :secrets.py
 mpremote cp main.py :main.py
 mpremote cp chore_screen.py :chore_screen.py
+mpremote cp btop_screen.py :btop_screen.py
 mpremote cp display_driver.py :display_driver.py
 mpremote cp n8n_screen.py :n8n_screen.py
 mpremote cp ch422g.py :ch422g.py
@@ -124,15 +126,19 @@ mpremote reboot
 
 > `secrets.py` is gitignored — never deploy from the repo directly, always copy manually.
 
-### 3. Display tiles (swipe left/right)
+### 3. Display tiles (swipe left/right, or nav buttons — they wrap around)
 
 | Tile | Screen |
 |------|--------|
 | 1 | Server stats — Docker / Ollama / Frigate |
 | 2 | Chore chart |
-| 3 | BTC price chart (7-day) |
-| 4 | n8n workflow runner |
-| 5 | Home Assistant (placeholder) |
+| 3 | btop-style system monitor (CPU history, per-core bars, mem, disks, procs, net) |
+| 4 | BTC price chart (7-day) |
+| 5 | n8n workflow runner |
+| 6 | Home Assistant (placeholder) |
+
+The btop screen is fed from the same `/stats?detail=true` request as server
+card 1 — no extra HTTP round-trip.
 
 ---
 
