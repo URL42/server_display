@@ -7,7 +7,7 @@
 #   tick()        — call every main loop iteration (noop unless pending work)
 #   refresh(data) — called from main.py after fetch_chores() returns data
 #
-# Expected JSON from bossbitch GET /chores:
+# Expected JSON from the server GET /chores:
 # {
 #   "date": "2026-04-25",
 #   "members": [
@@ -65,6 +65,7 @@ _col_state     = [False, False, False]  # True = expanded (show completed)
 _current_data  = None
 _date_lbl      = None
 _pending_complete = None   # dict or None — set by tap, consumed by tick()
+_last_hash     = None      # hash of last rendered data — skip redraw if unchanged
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -102,8 +103,8 @@ def _make_bar(parent, x, y, w, h, fill_color, pct):
 def _post_complete(task_id, member_name):
     try:
         import secrets
-        host = secrets.BOSSBITCH_HOST
-        port = int(secrets.BOSSBITCH_PORT)
+        host = secrets.SERVER_HOST
+        port = int(secrets.SERVER_PORT)
     except Exception as e:
         print("secrets error:", repr(e))
         return False
@@ -169,6 +170,20 @@ def _build_column(parent, col_idx, member, expanded):
     col.set_style_border_width(1, 0)
     col.set_style_pad_all(0, 0)
     col.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+    col.add_flag(lv.obj.FLAG.CLICKABLE)
+
+    def _col_tap(e, ci=col_idx):
+        # Only toggle if tap is in the header zone (top 42px)
+        try:
+            point = e.get_point()
+            if point.y <= 42:
+                global _last_hash
+                _col_state[ci] = not _col_state[ci]
+                _last_hash = None  # force redraw
+                _rebuild_columns()
+        except Exception:
+            pass
+    col.add_event_cb(_col_tap, lv.EVENT.CLICKED, None)
 
     # Header
     hdr = lv.obj(col)
@@ -179,6 +194,7 @@ def _build_column(parent, col_idx, member, expanded):
     hdr.set_style_border_color(acc, 0)
     hdr.set_style_border_width(2, 0)
     hdr.set_style_pad_all(0, 0)
+    hdr.remove_flag(lv.obj.FLAG.CLICKABLE)  # col handles tap
 
     name_lbl = lv.label(hdr)
     name_lbl.set_text(name.upper())
@@ -191,16 +207,19 @@ def _build_column(parent, col_idx, member, expanded):
     _set_text(arrow, C_SUBTEXT, lv.font_montserrat_12)
 
     if level is not None:
+        # "LV.3 67%" — level plus progress toward next level
+        prog = member.get("level_progress_pct", 0)
         lvl_lbl = lv.label(hdr)
-        lvl_lbl.set_text("LV.{}".format(level))
-        lvl_lbl.set_pos(COL_W - 72, 14)
+        lvl_lbl.set_text("LV.{} {}%".format(level, prog))
+        lvl_lbl.set_pos(COL_W - 110, 6)
         _set_text(lvl_lbl, C_YUN_LEVEL, lv.font_montserrat_14)
-
-    hdr.add_flag(lv.obj.FLAG.CLICKABLE)
-    def _hdr_tap(e, ci=col_idx):
-        _col_state[ci] = not _col_state[ci]
-        _rebuild_columns()
-    hdr.add_event_cb(_hdr_tap, lv.EVENT.CLICKED, None)
+        # streak (lightning bolt) + banked freezes (asterisks)
+        streak  = member.get("streak", 0)
+        freezes = member.get("freezes", 0)
+        st_lbl = lv.label(hdr)
+        st_lbl.set_text(lv.SYMBOL.CHARGE + "{} {}".format(streak, "*" * freezes))
+        st_lbl.set_pos(COL_W - 110, 24)
+        _set_text(st_lbl, C_YUN_BAR_D, lv.font_montserrat_12)
 
     # Task list
     task_cont = lv.obj(col)
@@ -246,7 +265,16 @@ def _build_column(parent, col_idx, member, expanded):
         t_lbl = lv.label(row)
         t_lbl.set_text(title)
         t_lbl.set_pos(22, 7)
-        t_lbl.set_size(COL_W - 42, 18)
+        t_lbl.set_size(COL_W - 72, 18)
+
+        # XP value on the right edge of the row
+        task_xp = task.get("xp", 0)
+        if task_xp and not done:
+            xp_lbl = lv.label(row)
+            xp_lbl.set_text("+{}".format(task_xp))
+            xp_lbl.set_pos(COL_W - 48, 7)
+            _set_text(xp_lbl, C_YUN_LEVEL if name == "Yun" else C_SUBTEXT,
+                      lv.font_montserrat_12)
 
         if done:
             _set_text(t_lbl, C_DONE, lv.font_montserrat_14)
@@ -278,16 +306,20 @@ def _build_column(parent, col_idx, member, expanded):
     bar_w = COL_W - 28
     d_pct = xp.get("daily_pct", 0)
     w_pct = xp.get("weekly_pct", 0)
+    d_xp  = xp.get("daily_xp", 0)
+    d_av  = xp.get("daily_available", 0)
+    w_xp  = xp.get("weekly_xp", 0)
+    w_av  = xp.get("weekly_available", 0)
     is_yun = (name == "Yun")
 
     d_lbl = lv.label(col)
-    d_lbl.set_text("Daily  {}%".format(d_pct))
+    d_lbl.set_text("Daily  {}/{} XP".format(d_xp, d_av))
     d_lbl.set_pos(10, xp_y)
     _set_text(d_lbl, C_SUBTEXT, lv.font_montserrat_12)
     _make_bar(col, 10, xp_y + 14, bar_w, 8, C_YUN_BAR_D if is_yun else C_BAR_DAILY, d_pct)
 
     w_lbl = lv.label(col)
-    w_lbl.set_text("Weekly  {}%".format(w_pct))
+    w_lbl.set_text("Weekly  {}/{} XP".format(w_xp, w_av))
     w_lbl.set_pos(10, xp_y + 28)
     _set_text(w_lbl, C_SUBTEXT, lv.font_montserrat_12)
     _make_bar(col, 10, xp_y + 42, bar_w, 8, C_YUN_BAR_W if is_yun else C_BAR_WEEKLY, w_pct)
@@ -349,9 +381,31 @@ def build(tile):
     print("chore screen built")
 
 
+def _compute_hash(data):
+    """Lightweight hash of task IDs + done states + xp/streak/level values."""
+    if not data:
+        return None
+    parts = []
+    for m in data.get("members", []):
+        for t in m.get("tasks", []):
+            parts.append("{}:{}".format(t.get("id",""), t.get("done", False)))
+        xp = m.get("xp", {})
+        parts.append("{}:{}:{}:{}".format(
+            xp.get("daily_xp",0), xp.get("daily_available",0),
+            xp.get("weekly_xp",0), xp.get("weekly_available",0)))
+        parts.append("{}:{}:{}:{}".format(
+            m.get("level",0), m.get("level_progress_pct",0),
+            m.get("streak",0), m.get("freezes",0)))
+    return hash("|".join(parts))
+
+
 def refresh(data):
     """Called from main.py after a successful fetch_chores()."""
-    global _current_data
+    global _current_data, _last_hash
+    new_hash = _compute_hash(data)
+    if new_hash == _last_hash:
+        return   # nothing changed — skip the redraw
+    _last_hash = new_hash
     _current_data = data
     if _date_lbl:
         _date_lbl.set_text(data.get("date", "--"))
