@@ -1,7 +1,7 @@
 services:
-  bossbitch:
+  server_display:
     build: .
-    container_name: bossbitch
+    container_name: server_display
     restart: unless-stopped
     ports:
       - "8099:8099"
@@ -10,7 +10,7 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8099/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
