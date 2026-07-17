@@ -32,7 +32,7 @@ MAX_BODY_BYTES   = 32768
 
 SCREEN_W    = 800
 SCREEN_H    = 480
-TOTAL_TILES = 6                      # +1 for btop screen
+TOTAL_TILES = 5
 
 GT911_SCL        = 9
 GT911_SDA        = 8
@@ -43,7 +43,6 @@ GT911_REG_POINT1 = 0x8150
 SERVER_INTERVAL_MS = 5_000
 BTC_INTERVAL_MS    = 60_000
 CHORE_INTERVAL_MS  = 30_000
-BTOP_INTERVAL_MS   = 10_000          # btop refreshes every 10s
 
 
 # ================= WIFI =================
@@ -139,9 +138,8 @@ def _http_get_json(host, port, path, use_ssl=False, server_hostname=None):
         except Exception:
             pass
 
-def fetch_stats(ip, detail=False):             # detail=False keeps all existing calls unchanged
-    path = "/stats?detail=true" if detail else STATS_PATH
-    return _http_get_json(ip, STATS_PORT, path)
+def fetch_stats(ip):
+    return _http_get_json(ip, STATS_PORT, STATS_PATH)
 
 def fetch_btc():
     data = _http_get_json(BTC_HOST, BTC_PORT,
@@ -164,10 +162,10 @@ def fetch_btc():
         return price, None
 
 def fetch_chores():
-    """Fetch chore data from bossbitch. Returns parsed JSON or None."""
+    """Fetch chore data from the server. Returns parsed JSON or None."""
     return _http_get_json(
-        secrets.BOSSBITCH_HOST,
-        secrets.BOSSBITCH_PORT,
+        secrets.SERVER_HOST,
+        secrets.SERVER_PORT,
         "/chores"
     )
 
@@ -181,10 +179,9 @@ try:
 except Exception:
     pass
 
-from display_driver import display
+from display_driver import display, BOUNCE_OK
 import n8n_screen
 import chore_screen
-import btop_screen                             # btop system monitor screen
 
 
 # ================= TOUCH =================
@@ -496,13 +493,12 @@ tv.set_size(800, 420)
 tv.align(lv.ALIGN.TOP_MID, 0, 0)
 tv.remove_flag(lv.obj.FLAG.GESTURE_BUBBLE)
 
-# Tile order: server(0), chores(1), btc(2), n8n(3), ha(4), btop(5)
+# Tile order: server(0), chores(1), btc(2), n8n(3), ha(4)
 t1 = tv.add_tile(0, 0, lv.DIR.RIGHT)
 t2 = tv.add_tile(1, 0, lv.DIR.LEFT | lv.DIR.RIGHT)
 t3 = tv.add_tile(2, 0, lv.DIR.LEFT | lv.DIR.RIGHT)
 t4 = tv.add_tile(3, 0, lv.DIR.LEFT | lv.DIR.RIGHT)
-t5 = tv.add_tile(4, 0, lv.DIR.LEFT | lv.DIR.RIGHT)  # was lv.DIR.LEFT only
-t6 = tv.add_tile(5, 0, lv.DIR.LEFT)                 # btop — rightmost tile
+t5 = tv.add_tile(4, 0, lv.DIR.LEFT)
 
 cards = []
 for i, s in enumerate(SERVERS):
@@ -512,7 +508,6 @@ chore_screen.build(t2)
 btc_ui = create_btc_card(t3)
 n8n_screen.build(t4)
 create_placeholder(t5, "Home Assistant", lv.SYMBOL.HOME)
-btop_screen.build(t6)                                # btop system monitor
 
 # Bottom nav bar
 bottom_bar = lv.obj(scr)
@@ -529,7 +524,6 @@ def get_page():
     if a == t3: return 2
     if a == t4: return 3
     if a == t5: return 4
-    if a == t6: return 5
     return 0
 
 def nav_left(e):
@@ -573,15 +567,13 @@ print("UI built. Starting main loop...")
 # State machine — one unit of work per iteration to stay LVGL-friendly.
 # 0        — idle / check intervals
 # 1,2,3    — fetch server stats (one server per state)
-# 4        — fetch btop detail (bossbitch only, 10s interval)
-# 5        — fetch BTC (60s interval)
-# 6        — fetch chores (30s interval)
-# Back to 0 after state 6.
+# 4        — fetch BTC
+# 5        — fetch chores
+# Back to 0 after state 5.
 
 server_last        = 0
 btc_last           = 0
 chore_last         = 0
-btop_last          = 0
 display_reset_last = 0
 state              = 0
 
@@ -594,9 +586,11 @@ while True:
 
     now = time.ticks_ms()
 
-    # Periodic hard reboot to prevent RGB bus drift
-    if time.ticks_diff(now, display_reset_last) > DISPLAY_RESET_MS:
-        print("Rebooting to reset RGB bus drift...")
+    # Periodic hard reboot fallback — only needed when the firmware build
+    # lacks bounce buffer support (BOUNCE_OK False). With bounce buffers
+    # the PSRAM-starvation drift is fixed at the root and no reboot needed.
+    if not BOUNCE_OK and time.ticks_diff(now, display_reset_last) > DISPLAY_RESET_MS:
+        print("Rebooting to reset RGB bus drift (no bounce buffer support)...")
         time.sleep_ms(100)
         machine.reset()
 
@@ -621,23 +615,14 @@ while True:
         state = 4
 
     elif state == 4:
-        if time.ticks_diff(now, btop_last) > BTOP_INTERVAL_MS:
-            print("Fetch btop")
-            data = fetch_stats(SERVERS[0]["ip"], detail=True)
-            if data and "detail" in data:
-                btop_screen.update(data, data["detail"])
-            btop_last = now
-        state = 5
-
-    elif state == 5:
         if force_refresh or time.ticks_diff(now, btc_last) > BTC_INTERVAL_MS:
             print("Fetch BTC")
             price, history = fetch_btc()
             update_btc_ui(btc_ui, price, history)
             btc_last = now
-        state = 6
+        state = 5
 
-    elif state == 6:
+    elif state == 5:
         if force_refresh or time.ticks_diff(now, chore_last) > CHORE_INTERVAL_MS:
             print("Fetch chores")
             chore_data = fetch_chores()
