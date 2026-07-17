@@ -6,6 +6,6 @@ class Settings(BaseSettings):
 
     todoist_api_token: str
     todoist_project_id: str
-    db_path: str = "/data/bossbitch.db"
+    db_path: str = "/data/server.db"
 
 settings = Settings()
