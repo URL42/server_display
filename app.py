@@ -8,7 +8,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     yield
 
-app = FastAPI(title="bossbitch", lifespan=lifespan)
+app = FastAPI(title="server-display", lifespan=lifespan)
 app.include_router(chores_router, prefix="/chores", tags=["chores"])
 
 @app.get("/health")
