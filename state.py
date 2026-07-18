@@ -68,8 +68,20 @@ def _level_progress_pct(total_xp: int) -> int:
     return _pct(total_xp - lo, hi - lo)
 
 
+async def _schema_is_current(db) -> bool:
+    """True if xp_state has the v2 columns (or doesn't exist yet)."""
+    async with db.execute("PRAGMA table_info(xp_state)") as cur:
+        cols = [r[1] for r in await cur.fetchall()]
+    return (not cols) or ("weekly_xp" in cols)
+
+
 async def init_db():
     async with aiosqlite.connect(DB) as db:
+        if not await _schema_is_current(db):
+            print("Old xp_state schema detected — rebuilding tables")
+            await db.execute("DROP TABLE IF EXISTS xp_state")
+            await db.execute("DROP TABLE IF EXISTS xp_ledger")
+            await db.commit()
         await db.execute("""
             CREATE TABLE IF NOT EXISTS xp_state (
                 member           TEXT PRIMARY KEY,
