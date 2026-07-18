@@ -18,8 +18,8 @@ TZ = ZoneInfo("America/Los_Angeles")
 #     the 20-minute ones while keeping a high completion %. Weighting by
 #     effort aligns the metric with what we actually want: effort.
 WEIGHT_TABLE = [
-    (25, ("clean room", "changing sheets", "clean refrigerator", "clean stove",
-          "clean freezer", "clean car", "clean bedroom", "help yun")),
+    (40, ("clean refrigerator", "clean stove", "clean freezer", "clean car")),
+    (25, ("clean room", "changing sheets", "clean bedroom", "help yun")),
     (15, ("laundry", "vacuum", "poop", "bathtub")),
     (5,  ("pillow", "school sheet", "bathroom trash", "water bottle")),
 ]
